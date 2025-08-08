@@ -24,24 +24,25 @@ class DomInspector {
 		this.maxZIndex = options.maxZIndex || getMaxZIndex() + 1;
 
 		this._cachedTarget = '';
-		this._throttleOnMove = throttle(this._onMove.bind(this), 100);
+		this._throttleOnMove = throttle(this._onMove.bind(this), 0);
 
 		this._init();
 	}
 	enable() {
 		if (this.destroyed) return logger.warn('Inspector instance has been destroyed! Please redeclare it.');
-		this.overlay.parent.style.display = 'block';
+		this.overlay.parent.style.opacity = '1';
 		this.root.addEventListener('mousemove', this._throttleOnMove);
+		window.addEventListener('wheel', this._throttleOnMove);
 	}
 	pause() {
 		this.root.removeEventListener('mousemove', this._throttleOnMove);
+		window.removeEventListener('wheel', this._throttleOnMove);
 	}
 	disable() {
-		this.overlay.parent.style.display = 'none';
-		this.overlay.parent.style.width = 0;
-		this.overlay.parent.style.height = 0;
+		this.overlay.parent.style.opacity = '0';
 		this.target = null;
 		this.root.removeEventListener('mousemove', this._throttleOnMove);
+		window.removeEventListener('wheel', this._throttleOnMove);
 	}
 	destroy() {
 		this.destroyed = true;
@@ -118,8 +119,14 @@ class DomInspector {
 			marginLeft: this._createSurroundEle(parent, 'margin margin-left'),
 			tips: this._createSurroundEle(parent, 'tips', '<div class="tag"></div><div class="id"></div><div class="class"></div><div class="line">&nbsp;|&nbsp;</div><div class="size"></div><div class="triangle"></div>')
 		};
-
 		this.root.appendChild(parent);
+		const reposition = this._updatePosition.bind(this);
+		window.addEventListener('scroll', reposition, true);
+		window.addEventListener('wheel', reposition, true);
+	}
+	_updatePosition() {
+		if (!this.target) return;
+		this._onMove({ target: this.target, synthetic: true });
 	}
 	_createElement(tag, attr, content) {
 		const ele = this._doc.createElement(tag);
@@ -137,14 +144,16 @@ class DomInspector {
 		return ele;
 	}
 	_onMove(e) {
-		for (let i = 0; i < this.exclude.length; i += 1) {
-			const cur = this.exclude[i];
-			if (cur.isEqualNode(e.target) || isParent(e.target, cur)) return;
+		if (!e.synthetic) {
+			for (let i = 0; i < this.exclude.length; i += 1) {
+				const cur = this.exclude[i];
+				if (cur.isEqualNode(e.target) || isParent(e.target, cur)) return;
+			}
+
+			this.target = e.target;
 		}
 
-		this.target = e.target;
-
-		if (this.target === this._cachedTarget) return null;
+		if (!this.target) return;
 
 		this._cachedTarget = this.target;
 		const elementInfo = getElementInfo(e.target);
